@@ -13,19 +13,14 @@ class NSE(nn.Module):
 
     def __init__(self, config): #n_outputs, dim_size, gpu, fix_embeds, p):
         super(NSE, self).__init__()
-        self.embed = nn.Embedding(config.n_embed, config.dim_size)
-       #self.dropout = nn.Dropout(config.p)
-        self.h_x = nn.Linear(2 * config.dim_size, 2 * config.dim_size)
-        self.h_lstm = nn.LSTM(config.dim_size, config.dim_size, dropout=config.p)
-        self.softmax = nn.Softmax()
-        self.c_lstm = nn.LSTM(2 * config.dim_size, config.dim_size)
-        self.h_x1 = nn.Linear(3 * config.dim_size, 3 * config.dim_size)
-        self.h_lstm1 = nn.LSTM(config.dim_size, config.dim_size)
-        self.c_lstm1 = nn.LSTM(3 * config.dim_size, 3 * config.dim_size)
-        self.h_l1 = nn.Linear(4 * config.dim_size, 1024)
+        self.read_lstm = nn.LSTM(config.n_units, config.n_units)
+        self.read_dropout = nn.Dropout(config.p)
+        self.write_lstm = nn.LSTM(2 * config.n_units, config.n_units)
+        self.write_dropout(config.p)
+        self.compose_l1 = nn.Linear(2 * config. n_units)
+        self.h_l1 = nn.Linear(4 * config.n_units, 1024)
         self.l_y = nn.Linear(1024, 3)
-
-        self.__dim_size = config.dim_size
+        self.n_units = config.n_units
         self.__gpu = config.gpu
         self.__fix_embeds = config.fix_embeds
         if self.__gpu > 0:
@@ -39,6 +34,36 @@ class NSE(nn.Module):
         params = list(self.parameters())
         for param in params:
             nn.init.uniform(param, -0.1, 0.1)
+
+    def read(self, M_t, x_t, batch_size, train):
+        """
+        The NSE read operation: Eq. 1-3 in the paper
+        """
+
+        o_t = self.read_lstm(self.read_dropout(x_t))
+        z_t = nn.softmax(F.reshape(F.batch_matmul(M_t, o_t), (batch_size, -1)))
+        m_t = F.reshape(F.batch_matmul(z_t, M_t, transa=True), (batch_size, -1))
+        return o_t, m_t, z_t
+
+    def compose(self, o_t, m_t, train):
+        """
+        The NSE compose operation: Eq. 4
+        This could be any DNN. Also we could rather compose x_t and m_t. But that is a detail.
+        """
+
+        c_t = self.compose_l1(F.concat([o_t, m_t], axis=1))
+        return c_t
+
+    def write(self, M_t, c_t, z_t, full_shape, train):
+        """
+        The NSE write operation: Eq. 5 and 6. Here we can write back c_t instead. You could try :)
+        """
+
+        h_t = self.write_lstm(self.write_dropout(c_t))
+        M_t = F.broadcast_to(F.reshape((1 - z_t), (full_shape[0], full_shape[1], 1)), full_shape) * M_t
+        M_t += F.broadcast_to(F.reshape(z_t, (full_shape[0], full_shape[1], 1)), full_shape) * F.broadcast_to(
+            F.reshape(h_t, (full_shape[0], 1, full_shape[2])), full_shape)
+        return M_t, h_t
 
     def forward(self, batch):
         print('forward pass')
