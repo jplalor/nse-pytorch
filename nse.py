@@ -13,17 +13,18 @@ class NSE(nn.Module):
 
     def __init__(self, config): #n_outputs, dim_size, gpu, fix_embeds, p):
         super(NSE, self).__init__()
-        self.read_lstm = nn.LSTM(config.n_units, config.n_units)
+        self.read_lstm = nn.LSTM(config.dim_size, config.dim_size)
         self.read_dropout = nn.Dropout(config.p)
-        self.write_lstm = nn.LSTM(2 * config.n_units, config.n_units)
-        self.write_dropout(config.p)
-        self.compose_l1 = nn.Linear(2 * config. n_units)
-        self.h_l1 = nn.Linear(4 * config.n_units, 1024)
+        self.write_lstm = nn.LSTM(2 * config.dim_size, config.dim_size)
+        self.write_dropout = nn.Dropout(config.p)
+        self.compose_l1 = nn.Linear(2 * config.dim_size, 1024)
+        self.h_l1 = nn.Linear(4 * config.dim_size, 1024)
         self.l_y = nn.Linear(1024, 3)
-        self.n_units = config.n_units
+        self.n_units = config.dim_size
+        self.embed = nn.Embedding(config.n_embed, config.dim_size)
         self.__gpu = config.gpu
         self.__fix_embeds = config.fix_embeds
-        if self.__gpu > 0:
+        if self.__gpu >= 0:
             self.cuda()
 
         self.config = config
